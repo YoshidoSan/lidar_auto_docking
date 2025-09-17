@@ -77,10 +77,10 @@ DockPerception::DockPerception(std::shared_ptr<rclcpp::Node> node_ptr)
     ideal_cloud_.push_back(p);
     front_cloud_.push_back(p);
   }
-  // Each side is 100mm long, at 45 degree angle
+  // Each side is 100mm long, at 45 degree angle !! changed -> added (-) to x !!
   for (double x = 0.0; x < 0.05; x += 0.001) {
     geometry_msgs::msg::Point p;
-    p.x = x;
+    p.x = -x;
     p.y = 0.15 + x;
     p.z = 0.0;
     ideal_cloud_.push_back(p);
@@ -96,7 +96,7 @@ DockPerception::DockPerception(std::shared_ptr<rclcpp::Node> node_ptr)
   */
   // Init base scan only after publishers are created
   scan_sub_ = node_ptr_->create_subscription<sensor_msgs::msg::LaserScan>(
-      "scan", 10, std::bind(&DockPerception::callback, this, _1));
+      "lidar_horizontal/scan", 10, std::bind(&DockPerception::callback, this, _1));
   std::cout << "Dock perception initialized\n";
 }
 

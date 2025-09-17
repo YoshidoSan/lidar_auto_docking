@@ -21,7 +21,7 @@
 
 #include <tf2/utils.h>
 
-#include <geometry_msgs/msg/twist.hpp>
+#include <geometry_msgs/msg/twist_stamped.hpp>
 #include <nav_msgs/msg/path.hpp>
 
 #include "lidar_auto_docking/tf2listener.h"
@@ -51,17 +51,17 @@ class BaseController {
   /**
    * @brief Get the last command sent
    */
-  bool getCommand(geometry_msgs::msg::Twist& command);
+  bool getCommand(geometry_msgs::msg::TwistStamped& command);
 
   /** @brief send stop command to robot base */
   void stop();
 
  private:
-  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
+  rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr cmd_vel_pub_;
   rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_;
 
   tf2_listener listener_;
-  geometry_msgs::msg::Twist command_;
+  geometry_msgs::msg::TwistStamped command_;
   /*
    * Parameters for approach controller
    */

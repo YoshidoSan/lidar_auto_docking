@@ -29,7 +29,7 @@ BaseController::BaseController(std::shared_ptr<rclcpp::Node> node_ptr)
   // Create publishers
   path_pub_ = node_ptr->create_publisher<nav_msgs::msg::Path>("path", 10);
   cmd_vel_pub_ =
-      node_ptr->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
+      node_ptr->create_publisher<geometry_msgs::msg::TwistStamped>("cmd_vel", 10);
 
   // TODO(enhancement): these should be loaded from ROS params
   k1_ = 3;
@@ -128,8 +128,11 @@ bool BaseController::approach(const geometry_msgs::msg::PoseStamped& target) {
   }
 
   // Send command to base
-  command_.linear.x = v;
-  command_.angular.z = bounded_w;
+  command_.twist.linear.x = v;
+  command_.twist.angular.z = bounded_w;
+  command_.header = std_msgs::msg::Header();
+  command_.header.stamp = rclcpp::Clock().now();
+  command_.header.frame_id = "docking";
   cmd_vel_pub_->publish(command_);
 
   // Create debugging view of path
@@ -144,9 +147,9 @@ bool BaseController::approach(const geometry_msgs::msg::PoseStamped& target) {
   double yaw = 0.0;
   for (int i = 0; i < 20; i++)  // 2 sec
   {
-    path_pose.pose.position.x += 0.1 * command_.linear.x * cos(yaw);
-    path_pose.pose.position.y += 0.1 * command_.linear.x * sin(yaw);
-    yaw += 0.1 * command_.angular.z;
+    path_pose.pose.position.x += 0.1 * command_.twist.linear.x * cos(yaw);
+    path_pose.pose.position.y += 0.1 * command_.twist.linear.x * sin(yaw);
+    yaw += 0.1 * command_.twist.angular.z;
     path_pose.pose.orientation.z = sin(theta / 2.0);
     path_pose.pose.orientation.w = cos(theta / 2.0);
 
@@ -211,9 +214,9 @@ bool BaseController::backup(double distance, double rotate_distance) {
       return true;
     } else if (rotate_distance > 0.0) {  // for rotation, take the  minimum
                                          // value as the angular turning
-      command_.angular.z = std::min(0.6, fabs(error) * 1.3 + 0.1);
+      command_.twist.angular.z = std::min(0.6, fabs(error) * 1.3 + 0.1);
     } else {
-      command_.angular.z = std::max(-0.6, -(fabs(error) * 1.3 + 0.1));
+      command_.twist.angular.z = std::max(-0.6, -(fabs(error) * 1.3 + 0.1));
     }
   } else {
     // Check if have backed up enough
@@ -225,25 +228,31 @@ bool BaseController::backup(double distance, double rotate_distance) {
         return true;
       } else {
         turning_ = true;
-        command_.linear.x = 0.0;
+        command_.twist.linear.x = 0.0;
       }
     } else {
-      command_.linear.x = -0.1;
+      command_.twist.linear.x = -0.1;
     }
   }
 
+  command_.header = std_msgs::msg::Header();
+  command_.header.stamp = rclcpp::Clock().now();
+  command_.header.frame_id = "docking";
   cmd_vel_pub_->publish(command_);
 
   return false;
 }
 
-bool BaseController::getCommand(geometry_msgs::msg::Twist& command) {
+bool BaseController::getCommand(geometry_msgs::msg::TwistStamped& command) {
   command = command_;
   return true;
 }
 
 void BaseController::stop() {
-  command_ = geometry_msgs::msg::Twist();
+  command_ = geometry_msgs::msg::TwistStamped();
+  command_.header = std_msgs::msg::Header();
+  command_.header.stamp = rclcpp::Clock().now();
+  command_.header.frame_id = "docking";
   cmd_vel_pub_->publish(command_);
 
   // Reset the backup controller
