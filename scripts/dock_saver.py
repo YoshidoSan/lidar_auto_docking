@@ -2,101 +2,102 @@
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
 from lidar_auto_docking_messages.msg import Initdock
+from std_msgs.msg import Empty
 import math
 import json
-import threading
-import sys
-import select
 from tf2_ros import LookupException
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
+from std_srvs.srv import Trigger
 
+# this is simple dock saver instead of gui app
+# call: ros2 service call /save_dock_pose std_srvs/srv/Trigger "{}"
+# to save pose into file
 
 class DockPoseSubscriber(Node):
     def __init__(self):
         super().__init__("dock_subscriber")
+
+        # Subscribe dock pose
         self.subscription = self.create_subscription(
             Initdock, "init_dock", self.listener_callback, 10
         )
 
+        # Service to save dock pose
+        self.srv = self.create_service(Trigger, "save_dock_pose", self.handle_save)
+
+        # File to save pose
         self.declare_parameter("load_file_path", "dock_pose.json")
         self.dock_file_path = (
             self.get_parameter("load_file_path").get_parameter_value().string_value
         )
 
+        # TF listener
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self)
-        self._output_timer = self.create_timer(0.5, self.on_timer)
 
-        self.x_pos = 0.0
-        self.y_pos = 0.0
-        self.z_pos = 0.0
-        self.w_pos = 0.0
+        # Params
+        self.x_pos = None
+        self.y_pos = None
+        self.z_pos = None
+        self.w_pos = None
+        self.bot_x = None
+        self.bot_y = None
+        self.bot_z = None
+        self.bot_w = None
 
-        self.bot_x = 0.0
-        self.bot_y = 0.0
-        self.bot_z = 0.0
-        self.bot_w = 0.0
-
-        # uruchamiamy wątek do obsługi wejścia z klawiatury
-        self.stop_event = threading.Event()
-        threading.Thread(target=self.keyboard_listener, daemon=True).start()
-
-    async def on_timer(self):
-        from_frame = "base_link"
-        to_frame = "map"
-        when = rclpy.time.Time()
-        print(f"\r[INFO] trying to get transform for dock...", end="", flush=True)
-        try:
-            self.robot_pose = await self._tf_buffer.lookup_transform_async(
-                to_frame, from_frame, when
-            )
-            self.bot_x = self.robot_pose.transform.translation.x
-            self.bot_y = self.robot_pose.transform.translation.y
-            self.bot_z = self.robot_pose.transform.rotation.z
-            self.bot_w = self.robot_pose.transform.rotation.w
-
-            dock_x_diff = abs(self.bot_x - self.x_pos)
-            dock_y_diff = abs(self.bot_y - self.y_pos)
-            dist_to_dock = math.sqrt(dock_x_diff**2 + dock_y_diff**2)
-
-            print(f"\r[INFO] Distance to dock: {dist_to_dock:.3f} m", end="", flush=True)
-
-        except LookupException as e:
-            self.get_logger().warn(f"Failed to get transform: {e!r}")
-
-    def save_dock_callback(self):
-        output_dict = {
-            "x": self.x_pos,
-            "y": self.y_pos,
-            "z": self.z_pos,
-            "w": self.w_pos,
-            "bx": self.bot_x,
-            "by": self.bot_y,
-            "bz": self.bot_z,
-            "bw": self.bot_w,
-        }
-        with open(self.dock_file_path, "w") as outfile:
-            json.dump(output_dict, outfile, indent=2)
-
-        print("\n[SAVED] Dock and robot coordinates have been saved!")
+        self.get_logger().info("Dock_Saver ready. Call /save_dock_pose service to save dock pose into file.")
 
     def listener_callback(self, msg):
         self.x_pos = msg.x
         self.y_pos = msg.y
         self.z_pos = msg.z
         self.w_pos = msg.w
+        self.get_logger().info(
+            f"[DOCK UPDATE] Dock pose received: ({self.x_pos:.2f}, {self.y_pos:.2f})"
+        )
 
-    def keyboard_listener(self):
-        print("\n[CTRL+C aby wyjść, naciśnij 's' + Enter aby zapisać dock i robot pose]\n")
-        while not self.stop_event.is_set():
-            # sprawdzamy czy coś jest na stdin
-            if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
-                line = sys.stdin.readline().strip()
-                if line == "s":
-                    self.save_dock_callback()
+    def handle_save(self, request, response):
+        from_frame = "base_link"
+        to_frame = "map"
+
+        try:
+            tf = self._tf_buffer.lookup_transform(to_frame, from_frame, rclpy.time.Time())
+
+            self.bot_x = tf.transform.translation.x
+            self.bot_y = tf.transform.translation.y
+            self.bot_z = tf.transform.rotation.z
+            self.bot_w = tf.transform.rotation.w
+
+            if self.x_pos is None or self.y_pos is None:
+                response.success = False
+                response.message = "Dock pose not received yet!"
+                return response
+
+            output_dict = {
+                "x": self.x_pos,
+                "y": self.y_pos,
+                "z": self.z_pos,
+                "w": self.w_pos,
+                "bx": self.bot_x,
+                "by": self.bot_y,
+                "bz": self.bot_z,
+                "bw": self.bot_w,
+            }
+            with open(self.dock_file_path, "w") as outfile:
+                json.dump(output_dict, outfile, indent=2)
+
+            response.success = True
+            response.message = f"Dock pose saved to {self.dock_file_path}"
+            self.get_logger().info(f"[SAVED] {response.message}")
+
+        except LookupException as e:
+            response.success = False
+            response.message = f"TF error: {e}"
+            self.get_logger().error(response.message)
+
+        return response
 
 
 def main(args=None):
@@ -105,9 +106,8 @@ def main(args=None):
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        print("\n[EXIT] Zatrzymano przez użytkownika.")
+        node.get_logger().info("Dock saver stopped by user.")
     finally:
-        node.stop_event.set()
         node.destroy_node()
         rclpy.shutdown()
 

@@ -41,7 +41,7 @@ DockPerception::DockPerception(std::shared_ptr<rclcpp::Node> node_ptr)
       tracking_frame_("odom"),
       found_dock_(false) {
   node_ptr_ = node_ptr;
-  debug_ = false;
+  debug_ = true;
 
   // enable debugging for first time test
   // Should we publish the debugging cloud
@@ -65,8 +65,8 @@ DockPerception::DockPerception(std::shared_ptr<rclcpp::Node> node_ptr)
   // Limit the average reprojection error of points onto
   // the ideal dock. This prevents the robot docking
   // with something that is very un-dock-like.
-  // TODO: parameterize (maybe)
-  max_alignment_error_ = 0.01;
+  // TODO: parameterize (maybe) at other values doesn't detect
+  max_alignment_error_ = 0.05;
 
   // Create ideal cloud
   // Front face is 300mm long
@@ -77,8 +77,8 @@ DockPerception::DockPerception(std::shared_ptr<rclcpp::Node> node_ptr)
     ideal_cloud_.push_back(p);
     front_cloud_.push_back(p);
   }
-  // Each side is 100mm long, at 45 degree angle !! changed -> added (-) to x !!
-  for (double x = 0.0; x < 0.05; x += 0.001) {
+  // Each side is 100mm long, at 45 degree angle !! changed -> added (-) to x !! -> a is 5*sqrt(2)
+  for (double x = 0.0; x < 0.06; x += 0.001) {
     geometry_msgs::msg::Point p;
     p.x = -x;
     p.y = 0.15 + x;
@@ -87,13 +87,13 @@ DockPerception::DockPerception(std::shared_ptr<rclcpp::Node> node_ptr)
     p.y = -0.15 - x;
     ideal_cloud_.insert(ideal_cloud_.begin(), p);
   }
-  /*
-    // Debugging publishers first
-    if (debug_) {
-      debug_points_ =
-          nh.advertise<sensor_msgs::msg::PointCloud2>("dock_points", 10);
-    }
-  */
+  
+  // Debugging publishers first
+  if (debug_) {
+    debug_points_ =
+        node_ptr_->create_publisher<sensor_msgs::msg::PointCloud2>("dock_points", 10);
+  }
+  
   // Init base scan only after publishers are created
   scan_sub_ = node_ptr_->create_subscription<sensor_msgs::msg::LaserScan>(
       "lidar_horizontal/scan", 10, std::bind(&DockPerception::callback, this, _1));
@@ -231,7 +231,7 @@ void DockPerception::callback(
       best_pose = pose;
       break;
     }
-    /*  TODO: Add in pointcloud visualisation feature in ros2
+    /* //TODO: Add in pointcloud visualisation feature in ros2
          else  // Let's see what's wrong with this point cloud.
         {
           if (debug_) {
@@ -256,10 +256,10 @@ void DockPerception::callback(
               cloud_iter[2] = not_best->points[i].z;
               ++cloud_iter;
             }
-            debug_points_.publish(cloud);
+            debug_points_->publish(cloud);
           }
         }
-        */
+    */
     candidates.pop();
   }
   // Did we find dock?
@@ -268,31 +268,31 @@ void DockPerception::callback(
     return;
   }
 
-  /*
+  
    // Update
-   if (debug_) {
-     // Create point cloud
-     sensor_msgs::msg::PointCloud2 cloud;
-     cloud.header.stamp = scan->header.stamp;
-     cloud.header.frame_id = tracking_frame_;
-     cloud.width = cloud.height = 0;
+  if (debug_) {
+    // Create point cloud
+    sensor_msgs::msg::PointCloud2 cloud;
+    cloud.header.stamp = scan->header.stamp;
+    cloud.header.frame_id = tracking_frame_;
+    cloud.width = cloud.height = 0;
 
-     // Allocate space for points
-     sensor_msgs::PointCloud2Modifier cloud_mod(cloud);
-     cloud_mod.setPointCloud2FieldsByString(1, "xyz");
-     cloud_mod.resize(best->points.size());
+    // Allocate space for points
+    sensor_msgs::PointCloud2Modifier cloud_mod(cloud);
+    cloud_mod.setPointCloud2FieldsByString(1, "xyz");
+    cloud_mod.resize(best->points.size());
 
-     // Fill in points
-     sensor_msgs::PointCloud2Iterator<float> cloud_iter(cloud, "x");
-     for (size_t i = 0; i < best->points.size(); i++) {
-       cloud_iter[0] = best->points[i].x;
-       cloud_iter[1] = best->points[i].y;
-       cloud_iter[2] = best->points[i].z;
-       ++cloud_iter;
-     }
-     debug_points_.publish(cloud);
-   }
-*/
+    // Fill in points
+    sensor_msgs::PointCloud2Iterator<float> cloud_iter(cloud, "x");
+    for (size_t i = 0; i < best->points.size(); i++) {
+      cloud_iter[0] = best->points[i].x;
+      cloud_iter[1] = best->points[i].y;
+      cloud_iter[2] = best->points[i].z;
+      ++cloud_iter;
+    }
+    debug_points_->publish(cloud);
+  }
+
 
   // Update stamp
   dock_.header.stamp = scan->header.stamp;
@@ -458,17 +458,19 @@ double DockPerception::fit(const DockCandidatePtr& candidate,
       fitness = -1.0;
     }
 
+    // !! causes issue with detecting good dock !!
     // If width of candidate is smaller than the width of dock
     // then the whole dock is not visible...
+    /*
     if (candidate->width() < 0.375) {
       // ... and heading is unreliable when close to dock
       RCLCPP_ERROR(rclcpp::get_logger("rclcpp"),
-                   "Dock candidate width is unreliable.");
+                   "Dock candidate width is unreliable. It's: %f", candidate->width());
       transform.rotation = pose.orientation;
       fitness = 0.001234;
       // Probably can use a different algorithm here, if necessary, which it
       // might not be.
-    }
+    }*/
 
     // Transform ideal cloud, and store for visualization
     candidate->points = icp_2d::transform(

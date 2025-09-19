@@ -36,7 +36,7 @@ BaseController::BaseController(std::shared_ptr<rclcpp::Node> node_ptr)
   k2_ = 2;
   min_velocity_ = 0.06;
   max_velocity_ = 0.06;
-  max_angular_velocity_ = 1.0;
+  max_angular_velocity_ = 0.2;
   beta_ = 0.2;
   lambda_ = 2.0;
 }
@@ -214,9 +214,9 @@ bool BaseController::backup(double distance, double rotate_distance) {
       return true;
     } else if (rotate_distance > 0.0) {  // for rotation, take the  minimum
                                          // value as the angular turning
-      command_.twist.angular.z = std::min(0.6, fabs(error) * 1.3 + 0.1);
+      command_.twist.angular.z = std::min(0.2, fabs(error) * 1.3 + 0.1);
     } else {
-      command_.twist.angular.z = std::max(-0.6, -(fabs(error) * 1.3 + 0.1));
+      command_.twist.angular.z = std::max(-0.2, -(fabs(error) * 1.3 + 0.1));
     }
   } else {
     // Check if have backed up enough
