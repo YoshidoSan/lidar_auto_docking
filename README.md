@@ -47,16 +47,11 @@ This package would require the nav2 stack  to be set-up on your robot.<br>
  
  Once the robot has detected a suitable dock candidate, the dock frame would appear in rviz2.<br>
  
- ![gui window](https://lh6.googleusercontent.com/Tm8OtZGG0-LW-NvTaaJr61TdrMGYs7cF6ZYNBUHqJh7zc_2xwIRk9vG3_ZrP7_6fyCdxO5V1CBZcA_EPJO_ksADJ9CUGiI7FqUfRM6gdxbCHZmV8ZJiJg0PEnaDlSBwaam0P6XXX)
- 
- Furthermore, a GUI window would pop up. The GUI would display the absolute distance(in metres) between base_link and the dock frame. 
- You may wish to use this tool to decide a suitable distance for the robot to stop at the dock.<br>
- 
- 3. Once you are satisfied with the selected dock, click on the save dock and bot pose button. This button would save the dock's position in the map frame. 
+ 3. Once you are satisfied with the selected dock, call the /save_dock_pose service. This service would save the dock's position in the map frame. 
 Also, the transformation between base_link and map would be saved.<br>
-
-![saved dock coord](https://lh5.googleusercontent.com/-xrFyCcjy1bGXcnQKNx6KXZ9sbuVeAdOU-31zJC7PZb5fE74XymiNMyQLMhU3CvuH4JY2ljEeD6sOnCSmmwGKgBWaEXLLvLBLCPYWFGjqPP0sdgRMQeift8254R7bPHKJ8_KnYif)
-
+ ```
+ros2 service call /save_dock_pose std_srvs/srv/Trigger "{}"
+ ```
 4. Next, please modify the config/autodock_params.yaml file and key in suitable parameters. 
 Please run colcon build once suitable parameters have been keyed in.<br>
 
